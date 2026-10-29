@@ -18,6 +18,49 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 MAX_BYTES = 60 * 1024 * 1024
 MAX_CHARS = 1_000_000
+DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
+
+
+def normalize_api_key(api_key: str) -> str:
+    key = api_key.strip()
+    if not key:
+        raise ValueError('请在侧栏填写 API Key，或配置 .env。')
+    if any(c.isspace() for c in key) or not key.isascii() or any(c in key for c in '\"\''):
+        raise ValueError('密钥包含空格、换行、引号或非英文字符。请重新复制完整的原始密钥，不要添加引号或 Bearer 前缀。')
+    if '*' in key or '…' in key:
+        raise ValueError('不能使用带星号或省略号的遮蔽密钥，请复制创建时显示的完整密钥。')
+    return key
+
+
+def model_error_message(exc: Exception) -> str:
+    """Use only error type/status, never reflect service messages or credentials."""
+    status = getattr(exc, 'status_code', None)
+    if status is None:
+        status = getattr(getattr(exc, 'response', None), 'status_code', None)
+    if status == 401 or 'Authentication' in type(exc).__name__:
+        return ('DeepSeek 密钥认证失败（HTTP 401）。请确认使用官方开放平台创建的完整密钥，'
+                '而非密钥名称或遮蔽后的文本。若重新粘贴后仍失败，请在官方平台新建密钥再试。')
+    if status == 402:
+        return 'DeepSeek 账户余额不足（HTTP 402）。请在官方开放平台查看 API 账户余额。'
+    if status == 429:
+        return '请求过于频繁或达到限额（HTTP 429），请稍后重试。'
+    if status == 403:
+        return '服务拒绝访问（HTTP 403），请检查账户权限或服务访问限制。'
+    if status == 404:
+        return '模型或接口不存在（HTTP 404），请检查模型名称。'
+    return f'模型连接或调用失败（{type(exc).__name__}）。请检查网络、服务状态和模型配置。'
+
+
+def check_deepseek_key(api_key: str) -> None:
+    """Authenticate against the official model-list endpoint; no chat generation."""
+    import httpx
+    key = normalize_api_key(api_key)
+    with httpx.Client(timeout=15) as client:
+        response = client.get(f'{DEEPSEEK_BASE_URL}/models',
+                              headers={'Authorization': f'Bearer {key}'})
+        response.raise_for_status()
+        if not isinstance(response.json().get('data'), list):
+            raise ValueError('接口返回格式异常，请稍后重试。')
 
 
 def load_document(name: str, data: bytes) -> list[Document]:
@@ -151,10 +194,10 @@ def create_model(provider: str, model_name: str, api_key: str = '', base_url: st
     if not model_name.strip():
         raise ValueError('请输入模型名称。')
     if provider == 'DeepSeek 在线模型':
-        if not api_key.strip():
-            raise ValueError('请在侧栏填写 API Key，或配置 .env。')
+        api_key = normalize_api_key(api_key)
         from langchain_deepseek import ChatDeepSeek
-        return ChatDeepSeek(model=model_name, api_key=api_key, temperature=0.2,
+        return ChatDeepSeek(model=model_name.strip(), api_key=api_key,
+                            base_url=DEEPSEEK_BASE_URL, temperature=0.2,
                             max_tokens=1800, timeout=60, max_retries=1)
     if provider == 'Ollama 本地模型':
         from urllib.parse import urlparse

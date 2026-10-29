@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage
 import streamlit as st
 
-from core import KnowledgeBase, answer, create_model, format_context, load_document
+from core import (KnowledgeBase, answer, create_model, format_context, load_document,
+                  check_deepseek_key, model_error_message)
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / '.env')
@@ -21,6 +22,16 @@ with st.sidebar:
     if provider == 'DeepSeek 在线模型':
         key = st.text_input('API Key', type='password', value=os.getenv('DEEPSEEK_API_KEY', ''))
         model_name = st.text_input('模型名称', os.getenv('DEEPSEEK_MODEL', 'deepseek-chat'))
+        st.caption('仅接受 DeepSeek 官方开放平台的完整 API Key。接口：https://api.deepseek.com')
+        if st.button('检查密钥连接（不生成回答）'):
+            try:
+                with st.spinner('正在检查官方接口认证…'):
+                    check_deepseek_key(key)
+                st.success('密钥认证通过，已成功获取模型列表。现在可以提问；聊天调用仍需可用余额。')
+            except ValueError as exc:
+                st.error(str(exc))
+            except Exception as exc:
+                st.error(model_error_message(exc))
         st.caption('提问时，会把问题、相关资料片段和最近对话发送给 DeepSeek。')
     elif provider == 'Ollama 本地模型':
         model_name = st.text_input('本地模型名称', os.getenv('OLLAMA_MODEL', 'qwen2.5:3b'))
@@ -105,7 +116,7 @@ if question:
         except ValueError as exc:
             st.error(str(exc))
         except Exception as exc:
-            st.error(f'模型调用失败（{type(exc).__name__}）。请检查密钥、余额、网络，或 Ollama 服务及模型名称。')
+            st.error(model_error_message(exc))
             st.caption('失败请求不会写入对话。未显示服务端原始错误，以免意外暴露密钥。')
 
 if st.session_state.messages:
