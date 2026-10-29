@@ -2,7 +2,7 @@
 
 > 《开源软件构建技术》第七章课程作业。面向软件工程专业学生，用课程资料回答问题、整理复习提纲和生成带依据的练习题。
 
-**开源仓库链接：待发布 GitHub 后填写真实地址。当前尚未发布，不应将本行作为最终提交链接。**
+**开源仓库：[feitiansiyan/cousemate-Langchain](https://github.com/feitiansiyan/cousemate-Langchain)**
 
 ## 1. 项目简介
 
